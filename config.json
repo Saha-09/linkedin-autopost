@@ -1,0 +1,31 @@
+{
+  "drafts_per_run": 2,
+  "linkedin_version": "202610",
+  "topic_lanes": [
+    { "name": "macro_india",      "desc": "RBI policy, rupee, inflation, India bond yields, GDP prints",        "news_query": "India RBI inflation rupee markets" },
+    { "name": "deals_ma",         "desc": "A specific M&A deal, its rationale, the multiple paid, who wins/loses", "news_query": "India M&A acquisition deal" },
+    { "name": "ipo_primary",      "desc": "A recent/upcoming IPO, the valuation ask, grey market vs fundamentals","news_query": "India IPO listing" },
+    { "name": "sector_move",      "desc": "One sector up or down today and the actual mechanism behind it",        "news_query": "Nifty sector stocks today India" },
+    { "name": "private_equity",   "desc": "A PE/VC move, fund dynamics, exits, dry powder, portfolio value creation", "news_query": "India private equity venture capital funding" },
+    { "name": "concept_explainer","desc": "One finance concept made intuitive (from CFA L1 or a case you did)",    "news_query": "India markets valuation" },
+    { "name": "global_markets",   "desc": "A US/global move and its read-through to Indian markets",               "news_query": "Fed US markets global India impact" }
+  ],
+  "checks": {
+    "max_words": 240,
+    "min_words": 35,
+    "max_hashtags": 4,
+    "ban_phrases": [
+      "in today's", "ever-evolving", "ever-changing", "game-changer", "game changer",
+      "let's dive in", "buckle up", "it's worth noting", "delve", "leverage the",
+      "navigate the landscape", "testament to", "at the end of the day", "what are your thoughts"
+    ]
+  },
+  "tagging": {
+    "min_hashtags": 2,
+    "max_hashtags": 4,
+    "evergreen_pool": [
+      "#investmentbanking", "#privateequity", "#equityresearch", "#finance",
+      "#indianstockmarket", "#mergersandacquisitions", "#capitalmarkets"
+    ]
+  }
+}
