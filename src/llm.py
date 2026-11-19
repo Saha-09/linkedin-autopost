@@ -1,17 +1,29 @@
-"""Pluggable LLM call. Pick a provider via env; all return plain text.
-
-Keeping this abstracted means you can start on a free tier (Gemini/Groq) and
-swap to Claude/OpenAI later by changing two env vars, no code change.
-"""
+"""Pluggable LLM call. Pick a provider via env; all return plain text."""
 import os
+import time
 import requests
 
 _DEFAULT_MODELS = {
-    "gemini": "gemini-2.0-flash",
+    "gemini": "gemini-flash-latest",
     "groq": "llama-3.3-70b-versatile",
     "anthropic": "claude-opus-4-8",
     "openai": "gpt-4o-mini",
 }
+
+TIMEOUT = 180  # newer models can take >60s to respond
+
+
+def _post(url, **kwargs):
+    """POST with a longer timeout and up to 3 tries on timeout/connection errors."""
+    last = None
+    for attempt in range(3):
+        try:
+            return requests.post(url, timeout=TIMEOUT, **kwargs)
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last = e
+            print(f"request attempt {attempt+1} failed ({e}); retrying...")
+            time.sleep(5)
+    raise last
 
 
 def complete(system_prompt: str, user_prompt: str, temperature: float = 0.9) -> str:
@@ -29,7 +41,7 @@ def complete(system_prompt: str, user_prompt: str, temperature: float = 0.9) -> 
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
             "generationConfig": {"temperature": temperature},
         }
-        r = requests.post(url, json=body, timeout=60)
+        r = _post(url, json=body)
         r.raise_for_status()
         return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
 
@@ -51,11 +63,10 @@ def complete(system_prompt: str, user_prompt: str, temperature: float = 0.9) -> 
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_prompt}],
         }
-        r = requests.post(url, json=body, headers=headers, timeout=60)
+        r = _post(url, json=body, headers=headers)
         r.raise_for_status()
         return r.json()["content"][0]["text"].strip()
 
-    # OpenAI-compatible (groq / openai)
     headers = {"Authorization": f"Bearer {key}"}
     body = {
         "model": model,
@@ -65,6 +76,6 @@ def complete(system_prompt: str, user_prompt: str, temperature: float = 0.9) -> 
             {"role": "user", "content": user_prompt},
         ],
     }
-    r = requests.post(url, json=body, headers=headers, timeout=60)
+    r = _post(url, json=body, headers=headers)
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"].strip()
