@@ -10,19 +10,28 @@ _DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
 }
 
-TIMEOUT = 180  # newer models can take >60s to respond
+TIMEOUT = 180
+_RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
 def _post(url, **kwargs):
-    """POST with a longer timeout and up to 3 tries on timeout/connection errors."""
+    """POST with long timeout; retry on network errors AND 'server busy' codes."""
     last = None
-    for attempt in range(3):
+    for attempt in range(4):
         try:
-            return requests.post(url, timeout=TIMEOUT, **kwargs)
+            r = requests.post(url, timeout=TIMEOUT, **kwargs)
+            if r.status_code in _RETRY_STATUS:
+                print(f"attempt {attempt+1}: HTTP {r.status_code} (busy), retrying...")
+                last = r
+                time.sleep(12)
+                continue
+            return r
         except (requests.Timeout, requests.ConnectionError) as e:
             last = e
-            print(f"request attempt {attempt+1} failed ({e}); retrying...")
-            time.sleep(5)
+            print(f"attempt {attempt+1}: {e}; retrying...")
+            time.sleep(12)
+    if isinstance(last, requests.Response):
+        return last
     raise last
 
 
