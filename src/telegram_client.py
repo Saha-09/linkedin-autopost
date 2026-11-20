@@ -23,9 +23,10 @@ def send_draft(draft_id: str, lane: str, text: str, tags: str = "none"):
     header = f"🗞️ Draft [{lane}] — approve to post to LinkedIn:\n\n"
     footer = ""
     if tags and tags.lower() != "none":
-        footer = ("\n\n— — —\n👉 Worth tagging. Either (a) drop a first comment "
-                  "@mentioning them right after it posts, or (b) Skip and post this "
-                  "manually to @-tag them in the body (more reach):\n" + tags)
+        # strip '@' so Telegram doesn't turn names into broken t.me links
+        clean = tags.replace("@", "")
+        footer = ("\n\n— — —\n👉 Worth @-tagging on LinkedIn (type @ and their name "
+                  "in the post or first comment):\n" + clean)
     _call(
         "sendMessage",
         chat_id=chat_id,

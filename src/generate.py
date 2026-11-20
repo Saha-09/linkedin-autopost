@@ -1,10 +1,11 @@
 """Generate post drafts in Soumyadeep's voice, run guardrails, queue them,
-and send to Telegram for approval. Triggered by the every-other-day workflow.
+and send to Telegram for approval. Triggered by the scheduled workflow.
 """
 import json
 import os
 import pathlib
 import random
+import re
 import time
 
 import requests
@@ -20,6 +21,27 @@ VOICE = (ROOT / "prompts" / "voice_system_prompt.md").read_text(encoding="utf-8"
 CONFIG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
 
 
+# ---------- Unicode bold (LinkedIn has no real bold) ----------
+def _bold_char(c: str) -> str:
+    if "A" <= c <= "Z":
+        return chr(0x1D400 + (ord(c) - ord("A")))
+    if "a" <= c <= "z":
+        return chr(0x1D41A + (ord(c) - ord("a")))
+    if "0" <= c <= "9":
+        return chr(0x1D7CE + (ord(c) - ord("0")))
+    return c
+
+
+def apply_bold(text: str) -> str:
+    """Convert **marked** spans to Unicode bold characters."""
+    return re.sub(r"\*\*(.+?)\*\*", lambda m: "".join(_bold_char(c) for c in m.group(1)), text)
+
+
+def strip_bold_markers(text: str) -> str:
+    return text.replace("**", "")
+
+
+# ---------- state ----------
 def load_state() -> dict:
     if STATE.exists():
         return json.loads(STATE.read_text())
@@ -31,10 +53,12 @@ def save_state(state: dict):
 
 
 def pick_lane(state: dict) -> dict:
+    """Weighted pick, avoiding the last 2 lanes so topics don't repeat."""
     lanes = CONFIG["topic_lanes"]
-    recent = set(state.get("recent_lanes", [])[-3:])
+    recent = set(state.get("recent_lanes", [])[-2:])
     pool = [l for l in lanes if l["name"] not in recent] or lanes
-    return random.choice(pool)
+    weights = [l.get("weight", 1) for l in pool]
+    return random.choices(pool, weights=weights, k=1)[0]
 
 
 def fetch_brief() -> str:
@@ -68,26 +92,18 @@ def build_user_prompt(lane: dict, brief: str, headlines_block: str) -> str:
     parts = [
         f"Today is {today}. Write ONE LinkedIn post in the '{lane['name']}' lane.",
         f"Lane focus: {lane['desc']}.",
-        "Use a real, current, specific angle. Do not invent figures — only use "
-        "numbers you are given or that are genuinely well known.",
+        "Follow the standard structure and style exactly. Make it post-ready.",
     ]
     if headlines_block:
         parts.append(headlines_block)
     if brief:
-        parts.append(
-            "Additional source — today's market brief. Pull a concrete angle, deal, "
-            "or number from it:\n\n" + brief
-        )
+        parts.append("Extra source — today's market brief:\n\n" + brief)
     if not headlines_block and not brief:
-        parts.append(
-            "No fresh sources available. Write from a widely-known recent theme in "
-            "this lane, and keep claims general rather than citing a precise figure "
-            "you are unsure of."
-        )
+        parts.append("No fresh sources available. Use a widely-known current theme in "
+                     "this lane and keep figures qualitative.")
     pool = CONFIG.get("tagging", {}).get("evergreen_pool", [])
     if pool:
-        parts.append("Evergreen hashtags you may blend with specific ones: "
-                     + ", ".join(pool))
+        parts.append("Broad hashtags you may blend with specific ones: " + ", ".join(pool))
     return "\n\n".join(parts)
 
 
@@ -113,9 +129,10 @@ def main():
         body, tags = "", "none"
         for attempt in range(3):  # retry if guardrails reject
             raw = llm.complete(VOICE, user_prompt, temperature=0.95)
-            body, tags = split_post_and_tags(raw)
-            ok, reason = passes_checks(body)
+            raw_body, tags = split_post_and_tags(raw)
+            ok, reason = passes_checks(strip_bold_markers(raw_body))
             if ok:
+                body = apply_bold(raw_body)  # render bold only after checks pass
                 break
             print(f"[{lane['name']}] rejected ({reason}), retry {attempt+1}")
         else:
