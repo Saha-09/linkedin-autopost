@@ -2,8 +2,13 @@ name: Generate LinkedIn drafts
 
 on:
   schedule:
-    - cron: "30 3 1-31/2 * *"
-  workflow_dispatch: {}
+    - cron: "0 1 1-31/2 * *"
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Breaking buzz to write about (leave blank for normal drafts)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -25,6 +30,7 @@ jobs:
           MARKET_BRIEF_URL: ${{ secrets.MARKET_BRIEF_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BUZZ_TOPIC: ${{ github.event.inputs.topic }}
         run: python src/generate.py
       - name: Commit queued drafts
         run: |
