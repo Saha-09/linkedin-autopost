@@ -21,7 +21,6 @@ VOICE = (ROOT / "prompts" / "voice_system_prompt.md").read_text(encoding="utf-8"
 CONFIG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
 
 
-# ---------- Unicode bold (LinkedIn has no real bold) ----------
 def _bold_char(c: str) -> str:
     if "A" <= c <= "Z":
         return chr(0x1D400 + (ord(c) - ord("A")))
@@ -33,7 +32,6 @@ def _bold_char(c: str) -> str:
 
 
 def apply_bold(text: str) -> str:
-    """Convert **marked** spans to Unicode bold characters."""
     return re.sub(r"\*\*(.+?)\*\*", lambda m: "".join(_bold_char(c) for c in m.group(1)), text)
 
 
@@ -41,7 +39,6 @@ def strip_bold_markers(text: str) -> str:
     return text.replace("**", "")
 
 
-# ---------- state ----------
 def load_state() -> dict:
     if STATE.exists():
         return json.loads(STATE.read_text())
@@ -53,7 +50,6 @@ def save_state(state: dict):
 
 
 def pick_lane(state: dict) -> dict:
-    """Weighted pick, avoiding the last 2 lanes so topics don't repeat."""
     lanes = CONFIG["topic_lanes"]
     recent = set(state.get("recent_lanes", [])[-2:])
     pool = [l for l in lanes if l["name"] not in recent] or lanes
@@ -117,22 +113,31 @@ def split_post_and_tags(raw: str) -> tuple[str, str]:
 def main():
     state = load_state()
     brief = fetch_brief()
-    n = CONFIG["drafts_per_run"]
+    buzz = os.environ.get("BUZZ_TOPIC", "").strip()
+    n = 1 if buzz else CONFIG["drafts_per_run"]
     sent = 0
 
     for _ in range(n):
-        lane = pick_lane(state)
+        if buzz:
+            lane = {
+                "name": "buzz",
+                "desc": f"The breaking buzz everyone is talking about today: {buzz}. "
+                        f"Give your sharp take — what it really signals and your read.",
+                "news_query": buzz,
+            }
+        else:
+            lane = pick_lane(state)
         headlines = news.recent_headlines(lane.get("news_query", lane["desc"]))
         headlines_block = news.as_prompt_block(headlines)
         user_prompt = build_user_prompt(lane, brief, headlines_block)
 
         body, tags = "", "none"
-        for attempt in range(3):  # retry if guardrails reject
+        for attempt in range(3):
             raw = llm.complete(VOICE, user_prompt, temperature=0.95)
             raw_body, tags = split_post_and_tags(raw)
             ok, reason = passes_checks(strip_bold_markers(raw_body))
             if ok:
-                body = apply_bold(raw_body)  # render bold only after checks pass
+                body = apply_bold(raw_body)
                 break
             print(f"[{lane['name']}] rejected ({reason}), retry {attempt+1}")
         else:
